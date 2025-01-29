@@ -186,3 +186,32 @@ await $`cp src/LICENSE ${output_dir}/WebRTC.xcframework/ios-arm64/WebRTC.framewo
 await $`cp src/LICENSE ${output_dir}/WebRTC.xcframework/ios-arm64_x86_64-simulator/WebRTC.framework/`
 
 echo`✅ WebRTC.xcframework generated.`
+
+echo`⏳ Generating version.json file...`
+
+cd('src')
+
+const webrtc_commit_hash = (await $`git rev-parse HEAD`).stdout.trim()
+
+const git_log = await $`git log -n 1 --pretty=fuller`
+const regex =new RegExp(`Cr-Commit-Position: refs/branch-heads/${branch_head_number}@{#(?<commit_position>\\d+)}`)
+const commit_position = Number(regex.exec(git_log)?.groups?.commit_position)
+
+cd('..')
+
+const version_json = {
+  "version": {
+    "full": `${webrtc_version}.${commit_position}.${build_number}`,
+    "webrtc_version": webrtc_version,
+    "commit_position": commit_position,
+    "build_number": build_number
+  },
+  "webrtc_commit_hash": webrtc_commit_hash,
+  "patches": [
+    "disable_audio_input_interface.patch"
+  ]
+}
+
+fs.writeFileSync(`${output_dir}/version.json`, JSON.stringify(version_json, null, 2))
+
+echo`✅ Generated version.json.`
