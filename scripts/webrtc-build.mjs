@@ -76,6 +76,21 @@ cd('..')
 
 echo`✅ Checkout branch_heads/${branch_head_number} succeeded.`
 
+// Apply patches
+
+echo`⏳ Applying patches...`
+
+const patch_dir = `${__dirname}/../patches`
+const patch_paths = [
+  `${patch_dir}/disable_audio_input_interface.patch`
+]
+
+for (const patch_path of patch_paths) {
+  await $`patch -p1 --no-backup-if-mismatch -i ${patch_path} -d src`
+}
+
+echo`✅ Patch application finished.`
+
 // Execute gclient command
 
 echo`⏳ Executing gclient sync command...`
