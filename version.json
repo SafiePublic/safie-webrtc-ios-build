@@ -1,0 +1,12 @@
+{
+  "version": {
+    "full": "132.5.0",
+    "webrtc_version": 132,
+    "commit_position": 5,
+    "build_number": 0
+  },
+  "webrtc_commit_hash": "afaf497805cbb502da89991c2dcd783201efdd08",
+  "patches": [
+    "disable_audio_input_interface.patch"
+  ]
+}
