@@ -33,7 +33,7 @@ see [patches/README.md](./patches/README.md)
 
 ```swift
 dependencies: [
-    .package(url: "https://github.com/hugehoge/webrtc-ios-build.git", branch: "main")
+    .package(url: "https://github.com/SafiePublic/safie-webrtc-ios-build.git", branch: "main")
 ]
 ```
 
