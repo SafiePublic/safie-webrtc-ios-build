@@ -1,4 +1,4 @@
-name: WebRTC Build And Upload
+name: WebRTC Build and Upload
 on: 
   workflow_dispatch:
     inputs:
@@ -12,8 +12,8 @@ on:
         type: string
         default: '0'
 jobs:
-  build:
-    name: Build WebRTC
+  build_and_upload:
+    name: Build and Upload
     runs-on: macos-15
     timeout-minutes: 90
     permissions:
