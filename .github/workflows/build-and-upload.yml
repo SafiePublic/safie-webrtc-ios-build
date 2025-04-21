@@ -1,0 +1,35 @@
+name: WebRTC Build and Upload
+on: 
+  workflow_dispatch:
+    inputs:
+      webrtc_version:
+        description: 'WebRTC Version'
+        required: true
+        type: string
+      build_number:
+        description: 'Build Number'
+        required: true
+        type: string
+        default: '0'
+jobs:
+  build_and_upload:
+    name: Build and Upload
+    runs-on: macos-15
+    timeout-minutes: 90
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: true
+      - name: Run build script
+        run: |
+          export PATH="$PATH:$(pwd)/depot_tools"
+          npx zx ./scripts/webrtc-build.mjs -v ${{ inputs.webrtc_version }} -n ${{ inputs.build_number }}
+      - name: Upload
+        uses: actions/upload-artifact@v4
+        with:
+          path: |
+            build/WebRTC.xcframework/
+            build/version.json
