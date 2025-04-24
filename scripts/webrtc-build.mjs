@@ -38,7 +38,7 @@ if (!response_milestones.ok) {
 }
 
 const milestone = await response_milestones.json()
-const branch_head_number = milestone[0].webrtc_branch
+const branch_head_number = Number(milestone[0].webrtc_branch)
 
 echo`✅ Use branch_head/${branch_head_number}.`
 
@@ -203,6 +203,7 @@ const version_json = {
   "version": {
     "full": `${webrtc_version}.${commit_position}.${build_number}`,
     "webrtc_version": webrtc_version,
+    "branch_head_number": branch_head_number,
     "commit_position": commit_position,
     "build_number": build_number
   },
