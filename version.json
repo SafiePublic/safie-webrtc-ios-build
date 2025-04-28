@@ -1,9 +1,10 @@
 {
   "version": {
-    "full": "133.4.0",
+    "full": "133.4.1",
     "webrtc_version": 133,
+    "branch_head_number": 6943,
     "commit_position": 4,
-    "build_number": 0
+    "build_number": 1
   },
   "webrtc_commit_hash": "cd3e2951ff0f36fa12bea747862c52533a2b39f3",
   "patches": [
