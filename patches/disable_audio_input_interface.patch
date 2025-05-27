@@ -1,17 +1,17 @@
 diff --git a/modules/audio_device/audio_device_impl.cc b/modules/audio_device/audio_device_impl.cc
-index 622be1b8f0..c6483f0904 100644
+index 45605292ff..fbed63b47e 100644
 --- a/modules/audio_device/audio_device_impl.cc
 +++ b/modules/audio_device/audio_device_impl.cc
-@@ -241,6 +241,7 @@ int32_t AudioDeviceModuleImpl::CreatePlatformSpecificObjects() {
+@@ -243,6 +243,7 @@ int32_t AudioDeviceModuleImpl::CreatePlatformSpecificObjects() {
    if (audio_layer == kPlatformDefaultAudio) {
      audio_device_.reset(new ios_adm::AudioDeviceIOS(
          /*bypass_voice_processing=*/false,
 +        /*disable_audio_input=*/false,
-         /*muted_speech_event_handler=*/nullptr));
+         /*muted_speech_event_handler=*/nullptr,
+         /*render_error_handler=*/nullptr));
      RTC_LOG(LS_INFO) << "iPhone Audio APIs will be utilized.";
-   }
 diff --git a/sdk/objc/api/peerconnection/RTCPeerConnectionFactory.h b/sdk/objc/api/peerconnection/RTCPeerConnectionFactory.h
-index 9abee87c7e..c6b9216460 100644
+index abfa679a1c..6037318d32 100644
 --- a/sdk/objc/api/peerconnection/RTCPeerConnectionFactory.h
 +++ b/sdk/objc/api/peerconnection/RTCPeerConnectionFactory.h
 @@ -41,6 +41,10 @@ RTC_OBJC_EXPORT
@@ -22,14 +22,14 @@ index 9abee87c7e..c6b9216460 100644
 + specified whether to disable audio input */
 +- (instancetype)initWithDisableAudioInput:(BOOL)disableAudioInput;
 +
- /* Initialize object with injectable video encoder/decoder factories and default ADM */
+ /* Initialize object with injectable video encoder/decoder factories and default
+  * ADM */
  - (instancetype)
-     initWithEncoderFactory:(nullable id<RTC_OBJC_TYPE(RTCVideoEncoderFactory)>)encoderFactory
 diff --git a/sdk/objc/api/peerconnection/RTCPeerConnectionFactory.mm b/sdk/objc/api/peerconnection/RTCPeerConnectionFactory.mm
-index fa1a024716..cccf148640 100644
+index 710ff3b480..485bc8ec13 100644
 --- a/sdk/objc/api/peerconnection/RTCPeerConnectionFactory.mm
 +++ b/sdk/objc/api/peerconnection/RTCPeerConnectionFactory.mm
-@@ -58,13 +58,14 @@ @implementation RTC_OBJC_TYPE (RTCPeerConnectionFactory) {
+@@ -58,13 +58,14 @@
    std::unique_ptr<rtc::Thread> _workerThread;
    std::unique_ptr<rtc::Thread> _signalingThread;
    BOOL _hasStartedAecDump;
@@ -45,7 +45,7 @@ index fa1a024716..cccf148640 100644
  #else
    return nullptr;
  #endif
-@@ -82,6 +83,11 @@ - (instancetype)init {
+@@ -84,6 +85,11 @@
    return [self initWithMediaAndDependencies:std::move(dependencies)];
  }
  
@@ -55,13 +55,13 @@ index fa1a024716..cccf148640 100644
 +}
 +
  - (instancetype)
-     initWithEncoderFactory:(nullable id<RTC_OBJC_TYPE(RTCVideoEncoderFactory)>)encoderFactory
-             decoderFactory:(nullable id<RTC_OBJC_TYPE(RTCVideoDecoderFactory)>)decoderFactory {
+     initWithEncoderFactory:
+         (nullable id<RTC_OBJC_TYPE(RTCVideoEncoderFactory)>)encoderFactory
 diff --git a/sdk/objc/native/api/audio_device_module.h b/sdk/objc/native/api/audio_device_module.h
-index 25aafbbecc..ad0319d8f8 100644
+index 7b9e535fed..5c9cd71d3e 100644
 --- a/sdk/objc/native/api/audio_device_module.h
 +++ b/sdk/objc/native/api/audio_device_module.h
-@@ -23,7 +23,8 @@ namespace webrtc {
+@@ -24,7 +24,8 @@ namespace webrtc {
  // consequences for the audio path in the device. It is not advisable to use in
  // most scenarios.
  rtc::scoped_refptr<AudioDeviceModule> CreateAudioDeviceModule(
@@ -72,49 +72,51 @@ index 25aafbbecc..ad0319d8f8 100644
  // If `muted_speech_event_handler` is exist, audio unit will catch speech
  // activity while muted.
 diff --git a/sdk/objc/native/api/audio_device_module.mm b/sdk/objc/native/api/audio_device_module.mm
-index 86105c6969..09b9af2656 100644
+index 40f6b9b916..7b568bee32 100644
 --- a/sdk/objc/native/api/audio_device_module.mm
 +++ b/sdk/objc/native/api/audio_device_module.mm
-@@ -17,10 +17,13 @@
+@@ -17,12 +17,13 @@
  
  namespace webrtc {
  
--rtc::scoped_refptr<AudioDeviceModule> CreateAudioDeviceModule(bool bypass_voice_processing) {
+-rtc::scoped_refptr<AudioDeviceModule> CreateAudioDeviceModule(
+-    bool bypass_voice_processing) {
 +rtc::scoped_refptr<AudioDeviceModule> CreateAudioDeviceModule(bool bypass_voice_processing,
 +                                                              bool disable_audio_input) {
    RTC_DLOG(LS_INFO) << __FUNCTION__;
  #if defined(WEBRTC_IOS)
--  return rtc::make_ref_counted<ios_adm::AudioDeviceModuleIOS>(bypass_voice_processing, nullptr);
-+  return rtc::make_ref_counted<ios_adm::AudioDeviceModuleIOS>(bypass_voice_processing,
-+                                                              disable_audio_input,
-+                                                              nullptr);
+   return rtc::make_ref_counted<ios_adm::AudioDeviceModuleIOS>(
+       bypass_voice_processing,
++      disable_audio_input,
+       /*muted_speech_event_handler=*/nullptr,
+       /*error_handler=*/nullptr);
  #else
-   RTC_LOG(LS_ERROR) << "current platform is not supported => this module will self destruct!";
-   return nullptr;
-@@ -31,7 +34,9 @@
-     AudioDeviceModule::MutedSpeechEventHandler handler, bool bypass_voice_processing) {
+@@ -47,8 +48,10 @@ rtc::scoped_refptr<AudioDeviceModule> CreateMutedDetectAudioDeviceModule(
+     bool bypass_voice_processing) {
    RTC_DLOG(LS_INFO) << __FUNCTION__;
  #if defined(WEBRTC_IOS)
--  return rtc::make_ref_counted<ios_adm::AudioDeviceModuleIOS>(bypass_voice_processing, handler);
+-  return rtc::make_ref_counted<ios_adm::AudioDeviceModuleIOS>(
+-      bypass_voice_processing, muted_speech_event_handler, error_handler);
 +  return rtc::make_ref_counted<ios_adm::AudioDeviceModuleIOS>(bypass_voice_processing,
 +                                                              false,
-+                                                              handler);
++                                                              muted_speech_event_handler,
++                                                              error_handler);
  #else
-   RTC_LOG(LS_ERROR) << "current platform is not supported => this module will self destruct!";
-   return nullptr;
+   RTC_LOG(LS_ERROR)
+       << "current platform is not supported => this module will self destruct!";
 diff --git a/sdk/objc/native/src/audio/audio_device_ios.h b/sdk/objc/native/src/audio/audio_device_ios.h
-index 072555db05..34f67cd405 100644
+index bbb4025694..cddb309640 100644
 --- a/sdk/objc/native/src/audio/audio_device_ios.h
 +++ b/sdk/objc/native/src/audio/audio_device_ios.h
-@@ -52,6 +52,7 @@ class AudioDeviceIOS : public AudioDeviceGeneric,
+@@ -57,6 +57,7 @@ class AudioDeviceIOS : public AudioDeviceGeneric,
   public:
    explicit AudioDeviceIOS(
        bool bypass_voice_processing,
 +      bool disable_audio_input,
-       AudioDeviceModule::MutedSpeechEventHandler muted_speech_event_handler);
+       AudioDeviceModule::MutedSpeechEventHandler muted_speech_event_handler,
+       AudioDeviceIOSRenderErrorHandler render_error_handler);
    ~AudioDeviceIOS() override;
- 
-@@ -215,6 +216,9 @@ class AudioDeviceIOS : public AudioDeviceGeneric,
+@@ -223,6 +224,9 @@ class AudioDeviceIOS : public AudioDeviceGeneric,
    // Determines whether voice processing should be enabled or disabled.
    const bool bypass_voice_processing_;
  
@@ -125,78 +127,84 @@ index 072555db05..34f67cd405 100644
    AudioDeviceModule::MutedSpeechEventHandler muted_speech_event_handler_;
  
 diff --git a/sdk/objc/native/src/audio/audio_device_ios.mm b/sdk/objc/native/src/audio/audio_device_ios.mm
-index e28b75cce8..30559dfac8 100644
+index dd7dcc4201..2fae8f90a1 100644
 --- a/sdk/objc/native/src/audio/audio_device_ios.mm
 +++ b/sdk/objc/native/src/audio/audio_device_ios.mm
-@@ -93,8 +93,10 @@ static void LogDeviceInfo() {
+@@ -97,9 +97,11 @@ static void LogDeviceInfo() {
  
  AudioDeviceIOS::AudioDeviceIOS(
      bool bypass_voice_processing,
 +    bool disable_audio_input,
-     AudioDeviceModule::MutedSpeechEventHandler muted_speech_event_handler)
+     AudioDeviceModule::MutedSpeechEventHandler muted_speech_event_handler,
+     AudioDeviceIOSRenderErrorHandler render_error_handler)
      : bypass_voice_processing_(bypass_voice_processing),
 +      disable_audio_input_(disable_audio_input),
        muted_speech_event_handler_(muted_speech_event_handler),
-       audio_device_buffer_(nullptr),
-       audio_unit_(nullptr),
-@@ -729,7 +731,10 @@ static void LogDeviceInfo() {
+       render_error_handler_(render_error_handler),
+       disregard_next_render_error_(false),
+@@ -814,8 +816,10 @@ void AudioDeviceIOS::SetupAudioBuffersForActiveAudioSession() {
+ bool AudioDeviceIOS::CreateAudioUnit() {
    RTC_DCHECK(!audio_unit_);
    BOOL detect_mute_speech_ = (muted_speech_event_handler_ != 0);
-   audio_unit_.reset(
--      new VoiceProcessingAudioUnit(bypass_voice_processing_, detect_mute_speech_, this));
-+      new VoiceProcessingAudioUnit(bypass_voice_processing_,
-+                                   detect_mute_speech_,
-+                                   disable_audio_input_,
-+                                   this));
+-  audio_unit_.reset(new VoiceProcessingAudioUnit(
+-      bypass_voice_processing_, detect_mute_speech_, this));
++  audio_unit_.reset(new VoiceProcessingAudioUnit(bypass_voice_processing_,
++                                                 detect_mute_speech_,
++                                                 disable_audio_input_,
++                                                 this));
    if (!audio_unit_->Init()) {
      audio_unit_.reset();
      return false;
 diff --git a/sdk/objc/native/src/audio/audio_device_module_ios.h b/sdk/objc/native/src/audio/audio_device_module_ios.h
-index e24c74a803..7c64828e07 100644
+index 394e1ff9bd..6dcaf174f9 100644
 --- a/sdk/objc/native/src/audio/audio_device_module_ios.h
 +++ b/sdk/objc/native/src/audio/audio_device_module_ios.h
-@@ -31,6 +31,7 @@ class AudioDeviceModuleIOS : public AudioDeviceModule {
+@@ -32,6 +32,7 @@ class AudioDeviceModuleIOS : public AudioDeviceModule {
  
    explicit AudioDeviceModuleIOS(
        bool bypass_voice_processing,
 +      bool disable_audio_input,
-       MutedSpeechEventHandler muted_speech_event_handler);
+       MutedSpeechEventHandler muted_speech_event_handler,
+       ADMErrorHandler error_handler);
    ~AudioDeviceModuleIOS() override;
- 
-@@ -133,6 +134,7 @@ class AudioDeviceModuleIOS : public AudioDeviceModule {
- #endif  // WEBRTC_IOS
+@@ -138,6 +139,7 @@ class AudioDeviceModuleIOS : public AudioDeviceModule {
   private:
+   void ReportError(ADMError error) const;
    const bool bypass_voice_processing_;
 +  const bool disable_audio_input_;
    MutedSpeechEventHandler muted_speech_event_handler_;
+   ADMErrorHandler error_handler_;
    bool initialized_ = false;
-   const std::unique_ptr<TaskQueueFactory> task_queue_factory_;
 diff --git a/sdk/objc/native/src/audio/audio_device_module_ios.mm b/sdk/objc/native/src/audio/audio_device_module_ios.mm
-index f13d020318..e682f03693 100644
+index 3b338f2399..d080447101 100644
 --- a/sdk/objc/native/src/audio/audio_device_module_ios.mm
 +++ b/sdk/objc/native/src/audio/audio_device_module_ios.mm
-@@ -40,8 +40,10 @@
- namespace ios_adm {
+@@ -43,9 +43,11 @@ namespace ios_adm {
  
- AudioDeviceModuleIOS::AudioDeviceModuleIOS(bool bypass_voice_processing,
-+                                           bool disable_audio_input,
-                                            MutedSpeechEventHandler muted_speech_event_handler)
+ AudioDeviceModuleIOS::AudioDeviceModuleIOS(
+     bool bypass_voice_processing,
++    bool disable_audio_input,
+     MutedSpeechEventHandler muted_speech_event_handler,
+     ADMErrorHandler error_handler)
      : bypass_voice_processing_(bypass_voice_processing),
 +      disable_audio_input_(disable_audio_input),
        muted_speech_event_handler_(muted_speech_event_handler),
+       error_handler_(error_handler),
        task_queue_factory_(CreateDefaultTaskQueueFactory()) {
-   RTC_LOG(LS_INFO) << "current platform is IOS";
-@@ -75,7 +77,9 @@
+@@ -89,8 +91,11 @@ int32_t AudioDeviceModuleIOS::Init() {
+   };
+   audio_device_buffer_.reset(
+       new webrtc::AudioDeviceBuffer(task_queue_factory_.get()));
+-  audio_device_.reset(new ios_adm::AudioDeviceIOS(
+-      bypass_voice_processing_, muted_speech_event_handler_, error_handler));
++  audio_device_.reset(
++      new ios_adm::AudioDeviceIOS(bypass_voice_processing_,
++                                  disable_audio_input_,
++                                  muted_speech_event_handler_,
++                                  error_handler));
+   RTC_CHECK(audio_device_);
  
-     audio_device_buffer_.reset(new webrtc::AudioDeviceBuffer(task_queue_factory_.get()));
-     audio_device_.reset(
--        new ios_adm::AudioDeviceIOS(bypass_voice_processing_, muted_speech_event_handler_));
-+        new ios_adm::AudioDeviceIOS(bypass_voice_processing_,
-+                                    disable_audio_input_,
-+                                    muted_speech_event_handler_));
-     RTC_CHECK(audio_device_);
- 
-     this->AttachAudioBuffer();
+   this->AttachAudioBuffer();
 diff --git a/sdk/objc/native/src/audio/voice_processing_audio_unit.h b/sdk/objc/native/src/audio/voice_processing_audio_unit.h
 index 99586a94ed..b2dab417e4 100644
 --- a/sdk/objc/native/src/audio/voice_processing_audio_unit.h
@@ -218,29 +226,28 @@ index 99586a94ed..b2dab417e4 100644
    AudioUnit vpio_unit_;
    VoiceProcessingAudioUnit::State state_;
 diff --git a/sdk/objc/native/src/audio/voice_processing_audio_unit.mm b/sdk/objc/native/src/audio/voice_processing_audio_unit.mm
-index fe35ce3609..79ed9ce91b 100644
+index 066f3b161c..1aaf10c309 100644
 --- a/sdk/objc/native/src/audio/voice_processing_audio_unit.mm
 +++ b/sdk/objc/native/src/audio/voice_processing_audio_unit.mm
-@@ -73,9 +73,11 @@ static OSStatus GetAGCState(AudioUnit audio_unit, UInt32* enabled) {
- 
- VoiceProcessingAudioUnit::VoiceProcessingAudioUnit(bool bypass_voice_processing,
-                                                    bool detect_mute_speech,
-+                                                   bool disable_audio_input,
-                                                    VoiceProcessingAudioUnitObserver* observer)
+@@ -76,9 +76,11 @@ static OSStatus GetAGCState(AudioUnit audio_unit, UInt32* enabled) {
+ VoiceProcessingAudioUnit::VoiceProcessingAudioUnit(
+     bool bypass_voice_processing,
+     bool detect_mute_speech,
++    bool disable_audio_input,
+     VoiceProcessingAudioUnitObserver* observer)
      : bypass_voice_processing_(bypass_voice_processing),
        detect_mute_speech_(detect_mute_speech),
 +      disable_audio_input_(disable_audio_input),
        observer_(observer),
        vpio_unit_(nullptr),
        state_(kInitRequired) {
-@@ -113,8 +115,8 @@ static OSStatus GetAGCState(AudioUnit audio_unit, UInt32* enabled) {
-     return false;
+@@ -117,7 +119,8 @@ bool VoiceProcessingAudioUnit::Init() {
    }
  
--  // Enable input on the input scope of the input element.
+   // Enable input on the input scope of the input element.
 -  UInt32 enable_input = 1;
 +  // If audio input not disabled, enable input on the input scope of the input element.
 +  UInt32 enable_input = disable_audio_input_ ? 0 : 1;
-   result = AudioUnitSetProperty(vpio_unit_, kAudioOutputUnitProperty_EnableIO,
-                                 kAudioUnitScope_Input, kInputBus, &enable_input,
-                                 sizeof(enable_input));
+   result = AudioUnitSetProperty(vpio_unit_,
+                                 kAudioOutputUnitProperty_EnableIO,
+                                 kAudioUnitScope_Input,
