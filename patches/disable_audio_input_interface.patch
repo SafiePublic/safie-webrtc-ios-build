@@ -243,7 +243,8 @@ index 066f3b161c..1aaf10c309 100644
        state_(kInitRequired) {
 @@ -117,7 +119,8 @@ bool VoiceProcessingAudioUnit::Init() {
    }
- 
+
+-  // Enable input on the input scope of the input element. 
 -  UInt32 enable_input = 1;
 +  // If audio input not disabled, enable input on the input scope of the input element.
 +  UInt32 enable_input = disable_audio_input_ ? 0 : 1;
