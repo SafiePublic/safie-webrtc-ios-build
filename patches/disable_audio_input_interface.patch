@@ -226,7 +226,7 @@ index 99586a94ed..b2dab417e4 100644
    AudioUnit vpio_unit_;
    VoiceProcessingAudioUnit::State state_;
 diff --git a/sdk/objc/native/src/audio/voice_processing_audio_unit.mm b/sdk/objc/native/src/audio/voice_processing_audio_unit.mm
-index 066f3b161c..1aaf10c309 100644
+index 066f3b161c..430a70a688 100644
 --- a/sdk/objc/native/src/audio/voice_processing_audio_unit.mm
 +++ b/sdk/objc/native/src/audio/voice_processing_audio_unit.mm
 @@ -76,9 +76,11 @@ static OSStatus GetAGCState(AudioUnit audio_unit, UInt32* enabled) {
@@ -241,10 +241,11 @@ index 066f3b161c..1aaf10c309 100644
        observer_(observer),
        vpio_unit_(nullptr),
        state_(kInitRequired) {
-@@ -117,7 +119,8 @@ bool VoiceProcessingAudioUnit::Init() {
+@@ -116,8 +118,8 @@ bool VoiceProcessingAudioUnit::Init() {
+     return false;
    }
-
--  // Enable input on the input scope of the input element. 
+ 
+-  // Enable input on the input scope of the input element.
 -  UInt32 enable_input = 1;
 +  // If audio input not disabled, enable input on the input scope of the input element.
 +  UInt32 enable_input = disable_audio_input_ ? 0 : 1;
