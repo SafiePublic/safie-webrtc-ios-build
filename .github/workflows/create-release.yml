@@ -61,7 +61,7 @@ jobs:
 
           ### Applied Patches
 
-          - [disable_audio_input_interface](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/blob/${WEBRTC_VERSION}/patches/disable_audio_input_interface.patch) 
+          - [disable_audio_input_interface](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/blob/${NEXT_RELEASE}/patches/disable_audio_input_interface.patch)
 
           ## Development
 
