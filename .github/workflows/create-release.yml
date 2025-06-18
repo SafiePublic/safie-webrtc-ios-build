@@ -16,7 +16,7 @@ jobs:
       - name: Set GITHUB_ENV
         run: |
           NEXT_RELEASE=${{ github.ref_name }}
-          WEBRTC_VERSION=$(cat version.json | jq -r .version.full)
+          WEBRTC_VERSION=$(cat version.json | jq -r .version.webrtc_version)
           BRANCH_HEAD_NUMBER=$(cat version.json | jq -r .version.branch_head_number)
           COMMIT_HASH=$(cat version.json | jq -r .webrtc_commit_hash)
           COMMIT_POSITION=$(cat version.json | jq -r .version.commit_position)
