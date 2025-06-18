@@ -22,10 +22,6 @@ jobs:
           COMMIT_POSITION=$(cat version.json | jq -r .version.commit_position)
           BUILD_NUMBER=$(cat version.json | jq -r .version.build_number)
 
-          PREV_RELEASE=$(gh release list --limit 1 --json tagName | jq -r '.[].tagName')
-          MERGE_COMMITS=$(git log ${PREV_RELEASE}...${NEXT_RELEASE} --merges --oneline | awk '{print $1}' | xargs)
-          PR_LIST_TSV=$(gh pr list --state merged --search "${MERGE_COMMITS}" --json number,title | jq -r '.[] | [.number, .title] | join("\t")')
-
           echo "NEXT_RELEASE=$NEXT_RELEASE" >> $GITHUB_ENV
           echo "WEBRTC_VERSION=$WEBRTC_VERSION" >> $GITHUB_ENV
           echo "BRANCH_HEAD_NUMBER=$BRANCH_HEAD_NUMBER" >> $GITHUB_ENV
@@ -39,9 +35,18 @@ jobs:
         run: |
           COMMIT_HASH_SHORT=$(echo $COMMIT_HASH | cut -c 1-7)
 
-          PR_URL_PREFIX="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/pull"
-          PR_LIST_MD=$(echo $PR_LIST_TSV | awk -v FS="\t" \
-              '{if ($2 !~ /^WebRTC [0-9]+\.[0-9]+\.[0-9]+$/) { printf "- %s [#%s]('$PR_URL_PREFIX'/%s)\n", $2, $1, $1 }}')
+          PREV_RELEASE=$(gh release list --limit 1 --json tagName | jq -r '.[].tagName')
+          MERGE_COMMITS=$(git log ${PREV_RELEASE}...${NEXT_RELEASE} --merges --oneline | awk '{print $1}' | xargs)
+          if [ -n "$MERGE_COMMITS" ]; then
+            PR_URL_PREFIX="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/pull"
+            PR_LIST_MD=$(
+              gh pr list --state merged --search "${MERGE_COMMITS}" --json number,title | \
+              jq -r '.[] | [.number, .title] | join("\t")' | \
+              awk -v FS="\t" '{if ($2 !~ /^WebRTC [0-9]+\.[0-9]+\.[0-9]+$/) { printf "- %s [#%s]('$PR_URL_PREFIX'/%s)\n", $2, $1, $1 }}'
+            )
+          else
+            PR_LIST_MD="Nothing"
+          fi
 
           NOTES=$(cat <<- EOS
           ## Build
