@@ -37,12 +37,16 @@ jobs:
 
           PREV_RELEASE=$(gh release list --limit 1 --json tagName | jq -r '.[].tagName')
           MERGE_COMMITS=$(git log ${PREV_RELEASE}...${NEXT_RELEASE} --merges --oneline | awk '{print $1}' | xargs)
-          PR_URL_PREFIX="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/pull"
-          PR_LIST=$(
+          if [ -n "$MERGE_COMMITS" ]; then
+            PR_URL_PREFIX="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/pull"
+            PR_LIST_MD=$(
               gh pr list --state merged --search "${MERGE_COMMITS}" --json number,title | \
               jq -r '.[] | [.number, .title] | join("\t")' | \
               awk -v FS="\t" '{if ($2 !~ /^WebRTC [0-9]+\.[0-9]+\.[0-9]+$/) { printf "- %s [#%s]('$PR_URL_PREFIX'/%s)\n", $2, $1, $1 }}'
-          )
+            )
+          else
+            PR_LIST_MD="Nothing"
+          fi
 
           NOTES=$(cat <<- EOS
           ## Build
