@@ -29,11 +29,6 @@ jobs:
           echo "COMMIT_POSITION=$COMMIT_POSITION" >> $GITHUB_ENV
           echo "BUILD_NUMBER=$BUILD_NUMBER" >> $GITHUB_ENV
           echo "PR_LIST_TSV=$PR_LIST_TSV" >> $GITHUB_ENV
-      - name: Fetch remote tags
-        run: |
-          # Fetch remote tags instead of using `fetch-tags` option in `actions/checkout`
-          # see: https://github.com/actions/checkout/issues/1467
-          git fetch --force origin 'refs/tags/*:refs/tags/*'
       - name: Create release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -41,6 +36,10 @@ jobs:
           COMMIT_HASH_SHORT=$(echo $COMMIT_HASH | cut -c 1-7)
 
           PREV_RELEASE=$(gh release list --limit 1 --json tagName | jq -r '.[].tagName')
+          # Fetch remote tag instead of using `fetch-tags` option in `actions/checkout`
+          # see: https://github.com/actions/checkout/issues/1467
+          git fetch origin "refs/tags/${PREV_RELEASE}:refs/tags/${PREV_RELEASE}"
+
           MERGE_COMMITS=$(git log ${PREV_RELEASE}...${NEXT_RELEASE} --merges --oneline | awk '{print $1}' | xargs)
           if [ -n "$MERGE_COMMITS" ]; then
             PR_URL_PREFIX="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/pull"
