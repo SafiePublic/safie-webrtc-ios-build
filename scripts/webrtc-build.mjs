@@ -195,7 +195,7 @@ const webrtc_commit_hash = (await $`git rev-parse HEAD`).stdout.trim()
 
 const git_log = await $`git log -n 1 --pretty=fuller`
 const regex =new RegExp(`Cr-Commit-Position: refs/branch-heads/${branch_head_number}@{#(?<commit_position>\\d+)}`)
-const commit_position = Number(regex.exec(git_log)?.groups?.commit_position)
+const commit_position = Number(regex.exec(git_log)?.groups?.commit_position) || 0
 
 cd('..')
 
