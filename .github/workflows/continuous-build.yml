@@ -1,0 +1,29 @@
+name: Continuous WebRTC Build
+on: 
+  workflow_dispatch:
+  schedule:
+    - cron: '0 0 * * 1'
+jobs:
+  detect_next_version:
+    name: Detect Next WebRTC Build Version
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: read
+    outputs:
+      WEBRTC_NEXT_VERSION: ${{ steps.detect_next_build_version.outputs.WEBRTC_NEXT_VERSION }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - name: Detect next build version
+        id: detect_next_build_version
+        run: |
+          WEBRTC_NEXT_VERSION=$(npx zx ./scripts/next-build-version.mjs)
+          echo "WEBRTC_NEXT_VERSION=$WEBRTC_NEXT_VERSION" >> $GITHUB_OUTPUT
+  kick_build_and_pr:
+    name: Kick Build and PR Workflow
+    needs: detect_next_version
+    if: ${{ needs.detect_next_version.outputs.WEBRTC_NEXT_VERSION != '' }}
+    uses: ./.github/workflows/build-and-pr.yml
+    with:
+      webrtc_version: ${{ needs.detect_next_version.outputs.WEBRTC_NEXT_VERSION }}
