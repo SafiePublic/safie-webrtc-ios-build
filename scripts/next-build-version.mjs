@@ -1,15 +1,5 @@
 #!/usr/bin/env zx
 
-// Fetch remote released versions
-const response_releases = await fetch(`https://chromiumdash.appspot.com/fetch_releases?channel=Stable&platform=iOS`)
-if (!response_releases.ok) {
-  await $`echo '❗️ Failed to fetch releases' 1>&2`
-  process.exit(1)
-}
-
-const releases = await response_releases.json()
-const released_versions = [...new Set(releases.map((release) => release["milestone"]))]
-
 // Detect latest built WebRTC version
 
 await $`git fetch --all`
@@ -27,16 +17,22 @@ if (latest_built_version == null) {
   process.exit(1)
 }
 
-// Look for the next WebRTC build version
+// Fetch release date for the next version
 
-const next_build_version = released_versions.reduce((acc, cur) => {
-  if (cur > latest_built_version) {
-    return acc != null ? Math.min(acc, cur) : cur
-  } else {
-    return acc
-  }
-}, null)
+const next_build_version = latest_built_version + 1
 
-if (next_build_version != null) {
+const response_release = await fetch(`https://chromiumdash.appspot.com/fetch_milestone_schedule?mstone=${next_build_version}`)
+if (!response_release.ok) {
+  await $`echo '❗️ Failed to fetch release date of ${next_build_version}' 1>&2`
+  process.exit(1)
+}
+
+const release = await response_release.json()
+const stable_date = new Date(release["mstones"][0]["stable_date"])
+
+// Output next build version if it was after the release date
+
+const now = new Date()
+if (stable_date < now) {
   echo`${next_build_version}`
 }
