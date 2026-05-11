@@ -4,6 +4,11 @@
 // see: https://chromium.googlesource.com/chromium/tools/depot_tools
 $.env.DEPOT_TOOLS_UPDATE = 0
 
+// Ensure depot_tools bundled python (python-bin/python3) is bootstrapped.
+// gn (post 2025-05-01) requires this. ensure_bootstrap does not modify the
+// depot_tools git checkout, so it is compatible with our SHA-pinned submodule.
+await $`${path.join(__dirname, '..', 'depot_tools', 'ensure_bootstrap')}`
+
 const cwd = await $`echo -n $(pwd)`
 
 // Parse Arguments
