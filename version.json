@@ -1,12 +1,12 @@
 {
   "version": {
-    "full": "147.13.0",
-    "webrtc_version": 147,
-    "branch_head_number": 7727,
-    "commit_position": 13,
+    "full": "148.7.0",
+    "webrtc_version": 148,
+    "branch_head_number": 7778,
+    "commit_position": 7,
     "build_number": 0
   },
-  "webrtc_commit_hash": "28452dff1bf86fec881a47949d4dedd4a2fe1f09",
+  "webrtc_commit_hash": "9a7f650bcd14f241d20f88f4e1ea3b7300de72ac",
   "patches": [
     "disable_audio_input_interface.patch"
   ]
