@@ -1,0 +1,796 @@
+diff --git a/sdk/BUILD.gn b/sdk/BUILD.gn
+index b7f8a41bf5..443a2b8f6c 100644
+--- a/sdk/BUILD.gn
++++ b/sdk/BUILD.gn
+@@ -1441,4 +1441,11 @@ if (is_ios || is_mac) {
+         }
+ 
++        if (rtc_use_h265) {
++          common_objc_headers += [
++            "objc/components/video_codec/RTCVideoDecoderFactoryH264H265.h",
++            "objc/components/video_codec/RTCVideoDecoderH265.h",
++          ]
++        }
++
+         sources = common_objc_headers
+         public_headers = common_objc_headers
+@@ -1782,4 +1789,10 @@ if (is_ios || is_mac) {
+         "objc/components/video_codec/nalu_rewriter.h",
+       ]
++      if (rtc_use_h265) {
++        sources += [
++          "objc/components/video_codec/h265_nalu_rewriter.cc",
++          "objc/components/video_codec/h265_nalu_rewriter.h",
++        ]
++      }
+       deps = [
+         "../common_video",
+@@ -1805,4 +1818,12 @@ if (is_ios || is_mac) {
+         "objc/components/video_codec/RTCVideoEncoderH264.mm",
+       ]
++      if (rtc_use_h265) {
++        sources += [
++          "objc/components/video_codec/RTCVideoDecoderFactoryH264H265.h",
++          "objc/components/video_codec/RTCVideoDecoderFactoryH264H265.m",
++          "objc/components/video_codec/RTCVideoDecoderH265.h",
++          "objc/components/video_codec/RTCVideoDecoderH265.mm",
++        ]
++      }
+ 
+       configs += [
+diff --git a/sdk/objc/api/peerconnection/RTCPeerConnectionFactory.mm b/sdk/objc/api/peerconnection/RTCPeerConnectionFactory.mm
+index 2ea5393960..2c4736842a 100644
+--- a/sdk/objc/api/peerconnection/RTCPeerConnectionFactory.mm
++++ b/sdk/objc/api/peerconnection/RTCPeerConnectionFactory.mm
+@@ -46,4 +46,7 @@
+ #import "components/video_codec/RTCVideoDecoderFactoryH264.h"
+ #import "components/video_codec/RTCVideoEncoderFactoryH264.h"
++#ifdef RTC_ENABLE_H265
++#import "components/video_codec/RTCVideoDecoderFactoryH264H265.h"
++#endif
+ #include "media/base/media_constants.h"
+ 
+@@ -77,6 +80,13 @@ - (instancetype)init {
+   dependencies.video_encoder_factory = webrtc::ObjCToNativeVideoEncoderFactory(
+       [[RTC_OBJC_TYPE(RTCVideoEncoderFactoryH264) alloc] init]);
++#ifdef RTC_ENABLE_H265
++  // Add the VideoToolbox H265 decoder to the default factory so that H265
++  // capable senders can be received without injecting custom factories.
++  dependencies.video_decoder_factory = webrtc::ObjCToNativeVideoDecoderFactory(
++      [[RTC_OBJC_TYPE(RTCVideoDecoderFactoryH264H265) alloc] init]);
++#else
+   dependencies.video_decoder_factory = webrtc::ObjCToNativeVideoDecoderFactory(
+       [[RTC_OBJC_TYPE(RTCVideoDecoderFactoryH264) alloc] init]);
++#endif
+   dependencies.env = webrtc::CreateEnvironment();
+ #ifdef WEBRTC_IOS
+diff --git a/sdk/objc/components/video_codec/RTCVideoDecoderFactoryH264H265.h b/sdk/objc/components/video_codec/RTCVideoDecoderFactoryH264H265.h
+new file mode 100644
+index 0000000000..6d91d6bed8
+--- /dev/null
++++ b/sdk/objc/components/video_codec/RTCVideoDecoderFactoryH264H265.h
+@@ -0,0 +1,21 @@
++/*
++ *  Copyright (c) 2017 The WebRTC project authors. All Rights Reserved.
++ *
++ *  Use of this source code is governed by a BSD-style license
++ *  that can be found in the LICENSE file in the root of the source
++ *  tree. An additional intellectual property rights grant can be found
++ *  in the file PATENTS.  All contributing project authors may
++ *  be found in the AUTHORS file in the root of the source tree.
++ */
++
++#import <Foundation/Foundation.h>
++
++#import "RTCVideoDecoderFactory.h"
++#import "sdk/objc/base/RTCMacros.h"
++
++/** Decoder factory combining the VideoToolbox based H264 and H265 decoders.
++ *  Only available when WebRTC is built with rtc_use_h265=true.
++ */
++RTC_OBJC_EXPORT
++@interface RTC_OBJC_TYPE (RTCVideoDecoderFactoryH264H265) : NSObject <RTC_OBJC_TYPE(RTCVideoDecoderFactory)>
++@end
+diff --git a/sdk/objc/components/video_codec/RTCVideoDecoderFactoryH264H265.m b/sdk/objc/components/video_codec/RTCVideoDecoderFactoryH264H265.m
+new file mode 100644
+index 0000000000..dd952fb950
+--- /dev/null
++++ b/sdk/objc/components/video_codec/RTCVideoDecoderFactoryH264H265.m
+@@ -0,0 +1,44 @@
++/*
++ *  Copyright (c) 2017 The WebRTC project authors. All Rights Reserved.
++ *
++ *  Use of this source code is governed by a BSD-style license
++ *  that can be found in the LICENSE file in the root of the source
++ *  tree. An additional intellectual property rights grant can be found
++ *  in the file PATENTS.  All contributing project authors may
++ *  be found in the AUTHORS file in the root of the source tree.
++ */
++
++#import "RTCVideoDecoderFactoryH264H265.h"
++
++#import "RTCVideoDecoderFactoryH264.h"
++#import "RTCVideoDecoderH265.h"
++
++@implementation RTC_OBJC_TYPE (RTCVideoDecoderFactoryH264H265) {
++  RTC_OBJC_TYPE(RTCVideoDecoderFactoryH264) *_h264Factory;
++}
++
++- (instancetype)init {
++  self = [super init];
++  if (self) {
++    _h264Factory = [[RTC_OBJC_TYPE(RTCVideoDecoderFactoryH264) alloc] init];
++  }
++  return self;
++}
++
++- (NSArray<RTC_OBJC_TYPE(RTCVideoCodecInfo) *> *)supportedCodecs {
++  NSMutableArray<RTC_OBJC_TYPE(RTCVideoCodecInfo) *> *codecs =
++      [[_h264Factory supportedCodecs] mutableCopy];
++  [codecs
++      addObjectsFromArray:[RTC_OBJC_TYPE(RTCVideoDecoderH265) supportedCodecs]];
++  return [codecs copy];
++}
++
++- (id<RTC_OBJC_TYPE(RTCVideoDecoder)>)createDecoder:
++    (RTC_OBJC_TYPE(RTCVideoCodecInfo) *)info {
++  if ([info.name isEqualToString:kRTCVideoCodecH265Name]) {
++    return [[RTC_OBJC_TYPE(RTCVideoDecoderH265) alloc] init];
++  }
++  return [_h264Factory createDecoder:info];
++}
++
++@end
+diff --git a/sdk/objc/components/video_codec/RTCVideoDecoderH265.h b/sdk/objc/components/video_codec/RTCVideoDecoderH265.h
+new file mode 100644
+index 0000000000..b466c739ec
+--- /dev/null
++++ b/sdk/objc/components/video_codec/RTCVideoDecoderH265.h
+@@ -0,0 +1,30 @@
++/*
++ *  Copyright (c) 2017 The WebRTC project authors. All Rights Reserved.
++ *
++ *  Use of this source code is governed by a BSD-style license
++ *  that can be found in the LICENSE file in the root of the source
++ *  tree. An additional intellectual property rights grant can be found
++ *  in the file PATENTS.  All contributing project authors may
++ *  be found in the AUTHORS file in the root of the source tree.
++ */
++
++#import <Foundation/Foundation.h>
++
++#import "RTCVideoCodecInfo.h"
++#import "RTCVideoDecoder.h"
++#import "sdk/objc/base/RTCMacros.h"
++
++NS_ASSUME_NONNULL_BEGIN
++
++/** Name of the H265 video codec as used in SDP (rtpmap). */
++RTC_EXTERN NSString *const kRTCVideoCodecH265Name;
++
++RTC_OBJC_EXPORT
++@interface RTC_OBJC_TYPE (RTCVideoDecoderH265) : NSObject <RTC_OBJC_TYPE(RTCVideoDecoder)>
++
++/** Returns the list of supported codec formats (profiles) for the H265 decoder. */
+++ (NSArray<RTC_OBJC_TYPE(RTCVideoCodecInfo) *> *)supportedCodecs;
++
++@end
++
++NS_ASSUME_NONNULL_END
+diff --git a/sdk/objc/components/video_codec/RTCVideoDecoderH265.mm b/sdk/objc/components/video_codec/RTCVideoDecoderH265.mm
+new file mode 100644
+index 0000000000..83a0760604
+--- /dev/null
++++ b/sdk/objc/components/video_codec/RTCVideoDecoderH265.mm
+@@ -0,0 +1,328 @@
++/*
++ *  Copyright (c) 2017 The WebRTC project authors. All Rights Reserved.
++ *
++ *  Use of this source code is governed by a BSD-style license
++ *  that can be found in the LICENSE file in the root of the source
++ *  tree. An additional intellectual property rights grant can be found
++ *  in the file PATENTS.  All contributing project authors may
++ *  be found in the AUTHORS file in the root of the source tree.
++ *
++ */
++
++#import "RTCVideoDecoderH265.h"
++
++#import <VideoToolbox/VideoToolbox.h>
++
++#include <span>
++
++#import "base/RTCVideoFrame.h"
++#import "base/RTCVideoFrameBuffer.h"
++#import "components/video_frame_buffer/RTCCVPixelBuffer.h"
++#import "helpers/scoped_cftyperef.h"
++
++#if defined(WEBRTC_IOS)
++#import "helpers/UIDevice+RTCDevice.h"
++#endif
++
++#include "modules/video_coding/include/video_error_codes.h"
++#include "rtc_base/checks.h"
++#include "rtc_base/logging.h"
++#include "rtc_base/time_utils.h"
++#include "sdk/objc/components/video_codec/h265_nalu_rewriter.h"
++
++NSString *const kRTCVideoCodecH265Name = @"H265";
++
++// Struct that we pass to the decoder per frame to decode. We receive it again
++// in the decoder callback.
++struct RTCH265FrameDecodeParams {
++  RTCH265FrameDecodeParams(RTCVideoDecoderCallback cb, int64_t ts)
++      : callback(cb), timestamp(ts) {}
++  RTCVideoDecoderCallback callback;
++  int64_t timestamp;
++};
++
++@interface RTC_OBJC_TYPE (RTCVideoDecoderH265)
++() - (void)setError : (OSStatus)error;
++@end
++
++// This is the callback function that VideoToolbox calls when decode is
++// complete.
++static void h265DecompressionOutputCallback(void *decoderRef,
++                                            void *params,
++                                            OSStatus status,
++                                            VTDecodeInfoFlags infoFlags,
++                                            CVImageBufferRef imageBuffer,
++                                            CMTime timestamp,
++                                            CMTime duration) {
++  std::unique_ptr<RTCH265FrameDecodeParams> decodeParams(
++      reinterpret_cast<RTCH265FrameDecodeParams *>(params));
++  if (status != noErr) {
++    RTC_OBJC_TYPE(RTCVideoDecoderH265) *decoder =
++        (__bridge RTC_OBJC_TYPE(RTCVideoDecoderH265) *)decoderRef;
++    [decoder setError:status];
++    RTC_LOG(LS_ERROR) << "Failed to decode frame. Status: " << status;
++    return;
++  }
++  // TODO(tkchin): Handle CVO properly.
++  RTC_OBJC_TYPE(RTCCVPixelBuffer) *frameBuffer =
++      [[RTC_OBJC_TYPE(RTCCVPixelBuffer) alloc] initWithPixelBuffer:imageBuffer];
++  RTC_OBJC_TYPE(
++      RTCVideoFrame) *decodedFrame = [[RTC_OBJC_TYPE(RTCVideoFrame) alloc]
++      initWithBuffer:frameBuffer
++            rotation:RTCVideoRotation_0
++         timeStampNs:CMTimeGetSeconds(timestamp) * webrtc::kNumNanosecsPerSec];
++  decodedFrame.timeStamp = decodeParams->timestamp;
++  decodeParams->callback(decodedFrame);
++}
++
++// Decoder.
++@implementation RTC_OBJC_TYPE (RTCVideoDecoderH265) {
++  CMVideoFormatDescriptionRef _videoFormat;
++  CMMemoryPoolRef _memoryPool;
++  VTDecompressionSessionRef _decompressionSession;
++  RTCVideoDecoderCallback _callback;
++  OSStatus _error;
++}
++
+++ (NSArray<RTC_OBJC_TYPE(RTCVideoCodecInfo) *> *)supportedCodecs {
++  // Advertise Main (profile-id=1) and Main10 (profile-id=2) profiles.
++  // VideoToolbox decodes both in hardware on every device that can run
++  // iOS 12 or later with an HEVC capable chip (A9 and later); level 6 is
++  // declared the same way Chrome does for hardware backed HEVC receivers.
++  NSDictionary<NSString *, NSString *> *mainParams = @{
++    @"profile-id" : @"1",
++    @"tier-flag" : @"0",
++    @"level-id" : @"180",
++    @"tx-mode" : @"SRST",
++  };
++  RTC_OBJC_TYPE(RTCVideoCodecInfo) *mainInfo =
++      [[RTC_OBJC_TYPE(RTCVideoCodecInfo) alloc]
++          initWithName:kRTCVideoCodecH265Name
++            parameters:mainParams];
++
++  NSDictionary<NSString *, NSString *> *main10Params = @{
++    @"profile-id" : @"2",
++    @"tier-flag" : @"0",
++    @"level-id" : @"180",
++    @"tx-mode" : @"SRST",
++  };
++  RTC_OBJC_TYPE(RTCVideoCodecInfo) *main10Info =
++      [[RTC_OBJC_TYPE(RTCVideoCodecInfo) alloc]
++          initWithName:kRTCVideoCodecH265Name
++            parameters:main10Params];
++
++  return @[ mainInfo, main10Info ];
++}
++
++- (instancetype)init {
++  self = [super init];
++  if (self) {
++    _memoryPool = CMMemoryPoolCreate(nil);
++  }
++  return self;
++}
++
++- (void)dealloc {
++  CMMemoryPoolInvalidate(_memoryPool);
++  CFRelease(_memoryPool);
++  [self destroyDecompressionSession];
++  [self setVideoFormat:nullptr];
++}
++
++- (NSInteger)startDecodeWithNumberOfCores:(int)numberOfCores {
++  return WEBRTC_VIDEO_CODEC_OK;
++}
++
++// TODO(bugs.webrtc.org/15444): Remove obsolete missingFrames param.
++- (NSInteger)decode:(RTC_OBJC_TYPE(RTCEncodedImage) *)inputImage
++        missingFrames:(BOOL)missingFrames
++    codecSpecificInfo:(nullable id<RTC_OBJC_TYPE(RTCCodecSpecificInfo)>)info
++         renderTimeMs:(int64_t)renderTimeMs {
++  RTC_DCHECK(inputImage.buffer);
++
++  if (_error != noErr) {
++    RTC_LOG(LS_WARNING) << "Last frame decode failed.";
++    _error = noErr;
++    return WEBRTC_VIDEO_CODEC_ERROR;
++  }
++
++  webrtc::ScopedCFTypeRef<CMVideoFormatDescriptionRef> inputFormat =
++      webrtc::ScopedCF(
++          webrtc::CreateH265VideoFormatDescription(std::span<const uint8_t>(
++              (uint8_t *)inputImage.buffer.bytes, inputImage.buffer.length)));
++  if (inputFormat) {
++    // Check if the video format has changed, and reinitialize decoder if
++    // needed.
++    if (!CMFormatDescriptionEqual(inputFormat.get(), _videoFormat)) {
++      [self setVideoFormat:inputFormat.get()];
++      int resetDecompressionSessionError = [self resetDecompressionSession];
++      if (resetDecompressionSessionError != WEBRTC_VIDEO_CODEC_OK) {
++        return resetDecompressionSessionError;
++      }
++    }
++  }
++  if (!_videoFormat) {
++    // We received a frame but we don't have format information so we can't
++    // decode it.
++    // This can happen after backgrounding. We need to wait for the next
++    // VPS/SPS/PPS before we can resume so we request a keyframe by returning
++    // an error.
++    RTC_LOG(LS_WARNING)
++        << "Missing video format. Frame with VPS/SPS/PPS required.";
++    return WEBRTC_VIDEO_CODEC_ERROR;
++  }
++  CMSampleBufferRef sampleBuffer = nullptr;
++  if (!webrtc::H265AnnexBBufferToCMSampleBuffer(
++          std::span<const uint8_t>((uint8_t *)inputImage.buffer.bytes,
++                                   inputImage.buffer.length),
++          _videoFormat,
++          &sampleBuffer,
++          _memoryPool)) {
++    return WEBRTC_VIDEO_CODEC_ERROR;
++  }
++  RTC_DCHECK(sampleBuffer);
++  VTDecodeFrameFlags decodeFlags =
++      kVTDecodeFrame_EnableAsynchronousDecompression;
++  std::unique_ptr<RTCH265FrameDecodeParams> frameDecodeParams;
++  frameDecodeParams.reset(
++      new RTCH265FrameDecodeParams(_callback, inputImage.timeStamp));
++  OSStatus status =
++      VTDecompressionSessionDecodeFrame(_decompressionSession,
++                                        sampleBuffer,
++                                        decodeFlags,
++                                        frameDecodeParams.release(),
++                                        nullptr);
++#if defined(WEBRTC_IOS)
++  // Re-initialize the decoder if we have an invalid session while the app is
++  // active or decoder malfunctions and retry the decode request.
++  if ((status == kVTInvalidSessionErr ||
++       status == kVTVideoDecoderMalfunctionErr) &&
++      [self resetDecompressionSession] == WEBRTC_VIDEO_CODEC_OK) {
++    RTC_LOG(LS_INFO) << "Failed to decode frame with code: " << status
++                     << " retrying decode after decompression session reset";
++    frameDecodeParams.reset(
++        new RTCH265FrameDecodeParams(_callback, inputImage.timeStamp));
++    status = VTDecompressionSessionDecodeFrame(_decompressionSession,
++                                               sampleBuffer,
++                                               decodeFlags,
++                                               frameDecodeParams.release(),
++                                               nullptr);
++  }
++#endif
++  CFRelease(sampleBuffer);
++  if (status != noErr) {
++    RTC_LOG(LS_ERROR) << "Failed to decode frame with code: " << status;
++    return WEBRTC_VIDEO_CODEC_ERROR;
++  }
++  return WEBRTC_VIDEO_CODEC_OK;
++}
++
++- (void)setCallback:(RTCVideoDecoderCallback)callback {
++  _callback = callback;
++}
++
++- (void)setError:(OSStatus)error {
++  _error = error;
++}
++
++- (NSInteger)releaseDecoder {
++  // Need to invalidate the session so that callbacks no longer occur and it
++  // is safe to null out the callback.
++  [self destroyDecompressionSession];
++  [self setVideoFormat:nullptr];
++  _callback = nullptr;
++  return WEBRTC_VIDEO_CODEC_OK;
++}
++
++#pragma mark - Private
++
++- (int)resetDecompressionSession {
++  [self destroyDecompressionSession];
++
++  // Need to wait for the first VPS/SPS/PPS to initialize decoder.
++  if (!_videoFormat) {
++    return WEBRTC_VIDEO_CODEC_OK;
++  }
++
++  // Set keys for OpenGL and IOSurface compatibilty, which makes the encoder
++  // create pixel buffers with GPU backed memory. The intent here is to pass
++  // the pixel buffers directly so we avoid a texture upload later during
++  // rendering. This currently is moot because we are converting back to an
++  // I420 frame after decode, but eventually we will be able to plumb
++  // CVPixelBuffers directly to the renderer.
++  // TODO(tkchin): Maybe only set OpenGL/IOSurface keys if we know that that
++  // we can pass CVPixelBuffers as native handles in decoder output.
++  NSDictionary *attributes = @{
++#if defined(WEBRTC_IOS) && (TARGET_OS_MACCATALYST || TARGET_OS_SIMULATOR)
++    (NSString *)kCVPixelBufferMetalCompatibilityKey : @(YES),
++#elif defined(WEBRTC_IOS)
++    (NSString *)kCVPixelBufferOpenGLESCompatibilityKey : @(YES),
++#elif defined(WEBRTC_MAC) && !defined(WEBRTC_ARCH_ARM64)
++    (NSString *)kCVPixelBufferOpenGLCompatibilityKey : @(YES),
++#endif
++#if !(TARGET_OS_SIMULATOR)
++    (NSString *)kCVPixelBufferIOSurfacePropertiesKey : @{},
++#endif
++    (NSString *)kCVPixelBufferPixelFormatTypeKey :
++        @(kCVPixelFormatType_420YpCbCr8BiPlanarFullRange),
++  };
++
++  VTDecompressionOutputCallbackRecord record = {
++      h265DecompressionOutputCallback,
++      (__bridge void *)self,
++  };
++  OSStatus status =
++      VTDecompressionSessionCreate(nullptr,
++                                   _videoFormat,
++                                   nullptr,
++                                   (__bridge CFDictionaryRef)attributes,
++                                   &record,
++                                   &_decompressionSession);
++  if (status != noErr) {
++    RTC_LOG(LS_ERROR) << "Failed to create decompression session: " << status;
++    [self destroyDecompressionSession];
++    return WEBRTC_VIDEO_CODEC_ERROR;
++  }
++  [self configureDecompressionSession];
++
++  return WEBRTC_VIDEO_CODEC_OK;
++}
++
++- (void)configureDecompressionSession {
++  RTC_DCHECK(_decompressionSession);
++#if defined(WEBRTC_IOS)
++  VTSessionSetProperty(_decompressionSession,
++                       kVTDecompressionPropertyKey_RealTime,
++                       kCFBooleanTrue);
++#endif
++}
++
++- (void)destroyDecompressionSession {
++  if (_decompressionSession) {
++#if defined(WEBRTC_IOS)
++    VTDecompressionSessionWaitForAsynchronousFrames(_decompressionSession);
++#endif
++    VTDecompressionSessionInvalidate(_decompressionSession);
++    CFRelease(_decompressionSession);
++    _decompressionSession = nullptr;
++  }
++}
++
++- (void)setVideoFormat:(CMVideoFormatDescriptionRef)videoFormat {
++  if (_videoFormat == videoFormat) {
++    return;
++  }
++  if (_videoFormat) {
++    CFRelease(_videoFormat);
++  }
++  _videoFormat = videoFormat;
++  if (_videoFormat) {
++    CFRetain(_videoFormat);
++  }
++}
++
++- (NSString *)implementationName {
++  return @"VideoToolbox";
++}
++
++@end
+diff --git a/sdk/objc/components/video_codec/h265_nalu_rewriter.cc b/sdk/objc/components/video_codec/h265_nalu_rewriter.cc
+new file mode 100644
+index 0000000000..15aef822ff
+--- /dev/null
++++ b/sdk/objc/components/video_codec/h265_nalu_rewriter.cc
+@@ -0,0 +1,195 @@
++/*
++ *  Copyright (c) 2015 The WebRTC project authors. All Rights Reserved.
++ *
++ *  Use of this source code is governed by a BSD-style license
++ *  that can be found in the LICENSE file in the root of the source
++ *  tree. An additional intellectual property rights grant can be found
++ *  in the file PATENTS.  All contributing project authors may
++ *  be found in the AUTHORS file in the root of the source tree.
++ *
++ */
++
++#include "sdk/objc/components/video_codec/h265_nalu_rewriter.h"
++
++#include <CoreFoundation/CoreFoundation.h>
++
++#include <cstddef>
++#include <cstdint>
++#include <span>
++#include <vector>
++
++#include "common_video/h265/h265_common.h"
++#include "rtc_base/checks.h"
++#include "rtc_base/logging.h"
++#include "sdk/objc/components/video_codec/nalu_rewriter.h"
++
++namespace webrtc {
++
++bool H265AnnexBBufferToCMSampleBuffer(std::span<const uint8_t> annexb_buffer,
++                                      CMVideoFormatDescriptionRef video_format,
++                                      CMSampleBufferRef* out_sample_buffer,
++                                      CMMemoryPoolRef memory_pool) {
++  RTC_DCHECK(out_sample_buffer);
++  RTC_DCHECK(video_format);
++  *out_sample_buffer = nullptr;
++
++  H265AnnexBBufferReader reader(annexb_buffer);
++  if (reader.SeekToNextNaluOfType(H265::kVps)) {
++    // Buffer contains a VPS NALU - skip it and the following SPS and PPS.
++    // The parameter sets are passed to the decoder via `video_format`.
++    std::span<const uint8_t> data;
++    if (!reader.ReadNalu(data)) {
++      RTC_LOG(LS_ERROR) << "Failed to read VPS";
++      return false;
++    }
++    if (!reader.ReadNalu(data)) {
++      RTC_LOG(LS_ERROR) << "Failed to read SPS";
++      return false;
++    }
++    if (!reader.ReadNalu(data)) {
++      RTC_LOG(LS_ERROR) << "Failed to read PPS";
++      return false;
++    }
++  } else {
++    // No VPS NALU - start reading from the first NALU in the buffer.
++    reader.SeekToStart();
++  }
++
++  // Allocate memory as a block buffer.
++  CMBlockBufferRef block_buffer = nullptr;
++  CFAllocatorRef block_allocator = CMMemoryPoolGetAllocator(memory_pool);
++  OSStatus status = CMBlockBufferCreateWithMemoryBlock(
++      kCFAllocatorDefault, nullptr, reader.BytesRemaining(), block_allocator,
++      nullptr, 0, reader.BytesRemaining(), kCMBlockBufferAssureMemoryNowFlag,
++      &block_buffer);
++  if (status != kCMBlockBufferNoErr) {
++    RTC_LOG(LS_ERROR) << "Failed to create block buffer.";
++    return false;
++  }
++
++  // Make sure block buffer is contiguous.
++  CMBlockBufferRef contiguous_buffer = nullptr;
++  if (!CMBlockBufferIsRangeContiguous(block_buffer, 0, 0)) {
++    status = CMBlockBufferCreateContiguous(kCFAllocatorDefault, block_buffer,
++                                           block_allocator, nullptr, 0, 0, 0,
++                                           &contiguous_buffer);
++    if (status != noErr) {
++      RTC_LOG(LS_ERROR) << "Failed to flatten non-contiguous block buffer: "
++                        << status;
++      CFRelease(block_buffer);
++      return false;
++    }
++  } else {
++    contiguous_buffer = block_buffer;
++    block_buffer = nullptr;
++  }
++
++  // Get a raw pointer into allocated memory.
++  size_t block_buffer_size = 0;
++  char* data_ptr = nullptr;
++  status = CMBlockBufferGetDataPointer(contiguous_buffer, 0, nullptr,
++                                       &block_buffer_size, &data_ptr);
++  if (status != kCMBlockBufferNoErr) {
++    RTC_LOG(LS_ERROR) << "Failed to get block buffer data pointer.";
++    CFRelease(contiguous_buffer);
++    return false;
++  }
++  RTC_DCHECK(block_buffer_size == reader.BytesRemaining());
++
++  // Write Hvcc NALUs into block buffer memory. The length prefixed layout is
++  // identical to Avcc, so the Avcc writer is reused.
++  AvccBufferWriter writer(
++      std::span(reinterpret_cast<uint8_t*>(data_ptr), block_buffer_size));
++  while (reader.BytesRemaining() > 0) {
++    std::span<const uint8_t> nalu_data;
++    if (reader.ReadNalu(nalu_data)) {
++      writer.WriteNalu(nalu_data);
++    }
++  }
++
++  // Create sample buffer.
++  status = CMSampleBufferCreate(kCFAllocatorDefault, contiguous_buffer, true,
++                                nullptr, nullptr, video_format, 1, 0, nullptr,
++                                0, nullptr, out_sample_buffer);
++  if (status != noErr) {
++    RTC_LOG(LS_ERROR) << "Failed to create sample buffer.";
++    CFRelease(contiguous_buffer);
++    return false;
++  }
++  CFRelease(contiguous_buffer);
++  return true;
++}
++
++CMVideoFormatDescriptionRef CreateH265VideoFormatDescription(
++    std::span<const uint8_t> annexb_buffer) {
++  const uint8_t* param_set_ptrs[3] = {};
++  size_t param_set_sizes[3] = {};
++  H265AnnexBBufferReader reader(annexb_buffer);
++  // Skip everything before the VPS, then read the VPS, SPS and PPS.
++  if (!reader.SeekToNextNaluOfType(H265::kVps)) {
++    return nullptr;
++  }
++  std::span<const uint8_t> param_set;
++  for (size_t i = 0; i < 3; ++i) {
++    if (!reader.ReadNalu(param_set)) {
++      RTC_LOG(LS_ERROR) << "Failed to read VPS/SPS/PPS";
++      return nullptr;
++    }
++    param_set_ptrs[i] = param_set.data();
++    param_set_sizes[i] = param_set.size();
++  }
++
++  // Parse the VPS/SPS/PPS into a CMVideoFormatDescription.
++  CMVideoFormatDescriptionRef description = nullptr;
++  OSStatus status = CMVideoFormatDescriptionCreateFromHEVCParameterSets(
++      kCFAllocatorDefault, 3, param_set_ptrs, param_set_sizes, 4, nullptr,
++      &description);
++  if (status != noErr) {
++    RTC_LOG(LS_ERROR) << "Failed to create H265 video format description: "
++                      << status;
++    return nullptr;
++  }
++  return description;
++}
++
++H265AnnexBBufferReader::H265AnnexBBufferReader(
++    std::span<const uint8_t> annexb_buffer)
++    : buffer_(annexb_buffer) {
++  offsets_ = H265::FindNaluIndices(annexb_buffer);
++  offset_ = offsets_.begin();
++}
++
++H265AnnexBBufferReader::~H265AnnexBBufferReader() = default;
++
++bool H265AnnexBBufferReader::ReadNalu(std::span<const uint8_t>& out_nalu) {
++  if (offset_ == offsets_.end()) {
++    return false;
++  }
++  out_nalu =
++      buffer_.subspan(offset_->payload_start_offset, offset_->payload_size);
++  ++offset_;
++  return true;
++}
++
++size_t H265AnnexBBufferReader::BytesRemaining() const {
++  if (offset_ == offsets_.end()) {
++    return 0;
++  }
++  return buffer_.size() - offset_->start_offset;
++}
++
++void H265AnnexBBufferReader::SeekToStart() {
++  offset_ = offsets_.begin();
++}
++
++bool H265AnnexBBufferReader::SeekToNextNaluOfType(H265::NaluType type) {
++  for (; offset_ != offsets_.end(); ++offset_) {
++    if (offset_->payload_size < 1)
++      continue;
++    if (H265::ParseNaluType(buffer_[offset_->payload_start_offset]) == type)
++      return true;
++  }
++  return false;
++}
++
++}  // namespace webrtc
+diff --git a/sdk/objc/components/video_codec/h265_nalu_rewriter.h b/sdk/objc/components/video_codec/h265_nalu_rewriter.h
+new file mode 100644
+index 0000000000..c331b25c02
+--- /dev/null
++++ b/sdk/objc/components/video_codec/h265_nalu_rewriter.h
+@@ -0,0 +1,76 @@
++/*
++ *  Copyright (c) 2015 The WebRTC project authors. All Rights Reserved.
++ *
++ *  Use of this source code is governed by a BSD-style license
++ *  that can be found in the LICENSE file in the root of the source
++ *  tree. An additional intellectual property rights grant can be found
++ *  in the file PATENTS.  All contributing project authors may
++ *  be found in the AUTHORS file in the root of the source tree.
++ *
++ */
++
++#ifndef SDK_OBJC_COMPONENTS_VIDEO_CODEC_H265_NALU_REWRITER_H_
++#define SDK_OBJC_COMPONENTS_VIDEO_CODEC_H265_NALU_REWRITER_H_
++
++#include <CoreMedia/CoreMedia.h>
++
++#include <cstddef>
++#include <cstdint>
++#include <span>
++#include <vector>
++
++#include "common_video/h265/h265_common.h"
++
++namespace webrtc {
++
++// Converts a buffer received from RTP into a sample buffer suitable for the
++// VideoToolbox decoder. The RTP buffer is in annex b format whereas the sample
++// buffer is in hvcc format (4 byte length prefix, same layout as avcc).
++// `video_format` must be provided; any VPS/SPS/PPS NALUs in the buffer are
++// skipped since the parameter sets are carried by the format description.
++// Caller is responsible for releasing the created sample buffer.
++bool H265AnnexBBufferToCMSampleBuffer(std::span<const uint8_t> annexb_buffer,
++                                      CMVideoFormatDescriptionRef video_format,
++                                      CMSampleBufferRef* out_sample_buffer,
++                                      CMMemoryPoolRef memory_pool);
++
++// Returns a video format description created from the VPS/SPS/PPS information
++// in the Annex B buffer. If there is no such information, nullptr is returned.
++// The caller is responsible for releasing the description.
++CMVideoFormatDescriptionRef CreateH265VideoFormatDescription(
++    std::span<const uint8_t> annexb_buffer);
++
++// Helper class for reading NALUs from an H265 RTP Annex B buffer.
++class H265AnnexBBufferReader final {
++ public:
++  explicit H265AnnexBBufferReader(std::span<const uint8_t> annexb_buffer);
++  ~H265AnnexBBufferReader();
++  H265AnnexBBufferReader(const H265AnnexBBufferReader& other) = delete;
++  void operator=(const H265AnnexBBufferReader& other) = delete;
++
++  // Returns a pointer to the beginning of the next NALU slice without the
++  // header bytes and its length. Returns false if no more slices remain.
++  bool ReadNalu(std::span<const uint8_t>& out_nalu);
++
++  // Returns the number of unread NALU bytes, including the size of the header.
++  // If the buffer has no remaining NALUs this will return zero.
++  size_t BytesRemaining() const;
++
++  // Reset the reader to start reading from the first NALU.
++  void SeekToStart();
++
++  // Seek to the next position that holds a NALU of the desired type,
++  // or the end if no such NALU is found.
++  // Return true if a NALU of the desired type is found, false if we
++  // reached the end instead.
++  bool SeekToNextNaluOfType(H265::NaluType type);
++
++ private:
++  const std::span<const uint8_t> buffer_;
++  std::vector<H265::NaluIndex> offsets_;
++  std::vector<H265::NaluIndex>::iterator offset_;
++};
++
++}  // namespace webrtc
++
++#endif  // SDK_OBJC_COMPONENTS_VIDEO_CODEC_H265_NALU_REWRITER_H_

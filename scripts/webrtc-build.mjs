@@ -87,7 +87,8 @@ echo`⏳ Applying patches...`
 
 const patch_dir = `${__dirname}/../patches`
 const patch_paths = [
-  `${patch_dir}/disable_audio_input_interface.patch`
+  `${patch_dir}/disable_audio_input_interface.patch`,
+  `${patch_dir}/support_h265_decode.patch`,
 ]
 
 for (const patch_path of patch_paths) {
@@ -121,6 +122,7 @@ cd('src')
 const base_args = [
   'is_debug=false',
   'rtc_libvpx_build_vp9=false',
+  'rtc_use_h265=true',
   'is_component_build=false',
   'rtc_include_tests=false',
   'rtc_enable_objc_symbol_export=true',
@@ -213,9 +215,7 @@ const version_json = {
     "build_number": build_number
   },
   "webrtc_commit_hash": webrtc_commit_hash,
-  "patches": [
-    "disable_audio_input_interface.patch"
-  ]
+  "patches": patch_paths.map((patch_path) => path.basename(patch_path))
 }
 
 fs.writeFileSync(`${output_dir}/version.json`, JSON.stringify(version_json, null, 2))
