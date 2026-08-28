@@ -100,3 +100,5 @@
 #import <WebRTC/RTCNativeMutableI420Buffer.h>
 #import <WebRTC/RTCCallbackLogger.h>
 #import <WebRTC/RTCFileLogger.h>
+#import <WebRTC/RTCVideoDecoderFactoryH264H265.h>
+#import <WebRTC/RTCVideoDecoderH265.h>
