@@ -36,6 +36,12 @@ jobs:
         run: |
           COMMIT_HASH_SHORT=$(echo $COMMIT_HASH | cut -c 1-7)
 
+          PATCH_LIST_MD=$(
+            cat version.json | jq -r '.patches[]' | while read -r PATCH_FILE; do
+              echo "- [${PATCH_FILE%.patch}](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/blob/${NEXT_RELEASE}/patches/${PATCH_FILE})"
+            done
+          )
+
           PREV_RELEASE=$(gh release list --limit 1 --json tagName | jq -r '.[].tagName')
           MERGE_COMMITS=$(git log ${PREV_RELEASE}...${NEXT_RELEASE} --merges --oneline | awk '{print $1}' | xargs)
           if [ -n "$MERGE_COMMITS" ]; then
@@ -61,7 +67,7 @@ jobs:
 
           ### Applied Patches
 
-          - [disable_audio_input_interface](${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/blob/${NEXT_RELEASE}/patches/disable_audio_input_interface.patch)
+          ${PATCH_LIST_MD}
 
           ## Development
 
