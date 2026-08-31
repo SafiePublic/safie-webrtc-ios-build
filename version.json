@@ -1,12 +1,12 @@
 {
   "version": {
-    "full": "151.0.1",
-    "webrtc_version": 151,
-    "branch_head_number": 7922,
+    "full": "152.0.0",
+    "webrtc_version": 152,
+    "branch_head_number": 7977,
     "commit_position": 0,
-    "build_number": 1
+    "build_number": 0
   },
-  "webrtc_commit_hash": "f20ebb8adbf4fa781830e4384c61f732bd28a217",
+  "webrtc_commit_hash": "6f37672d358475cd17544121a12494da454d85fb",
   "patches": [
     "disable_audio_input_interface.patch",
     "support_h265_decode.patch"
